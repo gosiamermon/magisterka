@@ -1,17 +1,11 @@
-import { version } from '../../package.json';
 import { Router } from 'express';
-import facets from './facets';
+import { experiments, sessions, subjects, measurements } from './api_classic';
 
-export default ({ config, db }) => {
+export default ({ DAL }) => {
 	let api = Router();
-
-	// mount the facets resource
-	api.use('/facets', facets({ config, db }));
-
-	// perhaps expose some API metadata at the root
-	api.get('/', (req, res) => {
-		res.json({ version });
-	});
-
+	experiments({ api, DAL: DAL.classic.experiment });
+	sessions({ api, DAL: DAL.classic.session });
+	subjects({ api, DAL: DAL.classic.subject });
+	measurements({ api, DAL: DAL.classic.measurement });
 	return api;
 }
