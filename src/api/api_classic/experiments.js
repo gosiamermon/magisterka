@@ -26,4 +26,24 @@ export default ({ api, DAL }) => {
 		return res.json(experiment);
 		//pozniej mozna zrobic filtrowanie po dacie lub po typie stymulusa
 	});
+
+	api.post(`${baseUrl}`, async (req, res) => {
+		const { experiment } = req.body;
+		const { dbType } = req.params;
+		const result = await DAL.saveExperiment(dbType, experiment);
+		return res.json(result);
+	});
+
+	api.put(`${baseUrl}`, async (req, res) => {
+		const { experiment } = req.body;
+		const { dbType } = req.params;
+		const result = await DAL.editExperiment(dbType, experiment);
+		return res.json(result);
+	});
+
+	api.delete(`${baseUrl}/:id([A-z0-9\-]+)`, async (req, res) => {
+		const { dbType, id } = req.params;
+		await DAL.deleteExperiment(dbType, id);
+		return res.end();
+	});
 };

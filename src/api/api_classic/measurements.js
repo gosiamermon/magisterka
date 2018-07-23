@@ -8,8 +8,8 @@ export default ({ api, DAL }) => {
 
   api.get(`${baseUrl}`, async (req, res) => {
     const { dbType } = req.params;
-    const { experimentId, experimentSessionId } = req.query;
-    const measurements = await DAL.getMeasurements(dbType, experimentId, experimentSessionId);
+    const { experimentId, sessionId } = req.query;
+    const measurements = await DAL.getMeasurements(dbType, experimentId, sessionId);
     if (measurements === undefined) {
       return res.status(status.notFound);
     }
@@ -25,14 +25,15 @@ export default ({ api, DAL }) => {
 
   api.post(`${baseUrl}/calibration`, async (req, res) => {
     const { measurements } = req.body;
-    const result = await DAL.saveCalibration(measurements);
+    const { dbType } = req.params;
+    const result = await DAL.saveCalibration(dbType, measurements);
     return res.json(result);
   });
 
   api.put(`${baseUrl}`, async (req, res) => {
-    const { fieldsToUpdate, filter } = req.body;
+    const { fieldsToUpdate, filters } = req.body;
     const { dbType } = req.params;
-    const result = await DAL.editMeasurements(dbType, fieldsToUpdate, filter);
+    const result = await DAL.editMeasurements(dbType, fieldsToUpdate, filters);
     return res.json(result);
   });
 

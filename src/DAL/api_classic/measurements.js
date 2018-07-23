@@ -3,6 +3,7 @@ import moment from 'moment';
 const mongoose = require('mongoose');
 import { MSSQL_DB, CASSANDRA_DB, MONGO_DB } from '../../constants';
 import { Measurement } from '../../models/api_classic/mongo';
+import { stringFields } from '../../constants';
 
 class MeasurementDAL {
   constructor(db) {
@@ -11,13 +12,13 @@ class MeasurementDAL {
     this.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
   }
 
-  async getMeasurementsFromCassandra(experimentId, experimentSessionId) {
+  async getMeasurementsFromCassandra(experimentId, sessionId) {
     let query = 'SELECT * FROM measurement';
     if (experimentId) {
       query += ` WHERE ExperimentId=${experimentId};`;
     }
-    else if (experimentSessionId) {
-      query += ` WHERE ExperimentSessionId=${experimentSessionId};`
+    else if (sessionId) {
+      query += ` WHERE sessionId=${sessionId};`
     }
     let measurements = await this.cassandraDB
       .execute(query);
@@ -25,28 +26,28 @@ class MeasurementDAL {
     return measurements;
   };
 
-  async getMeasurementsFromMssql(experimentId, experimentSessionId) {
+  async getMeasurementsFromMssql(experimentId, sessionId) {
     let query = `SELECT Measurement.*, MeasurementType.Value AS Type
                 FROM Measurement
                 LEFT JOIN MeasurementType ON Measurement.TypeId = MeasurementType.Id `;
     if (experimentId) {
       query += ` WHERE ExperimentId=${experimentId};`;
     }
-    else if (experimentSessionId) {
-      query += ` WHERE ExperimentSessionId=${experimentSessionId};`
+    else if (sessionId) {
+      query += ` WHERE ExperimentSessionId=${sessionId};`
     }
 
     const measurementsResult = await this.mssqlDB.request().query(query);
     return measurementsResult.recordset;
   };
 
-  async getMeasurementsFromMongo(experimentId, experimentSessionId) {
+  async getMeasurementsFromMongo(experimentId, sessionId) {
     let filter = {};
     if (experimentId) {
       filter.experimentId = experimentId;
     }
-    else if (experimentSessionId) {
-      filter.sessionId = experimentSessionId;
+    else if (sessionId) {
+      filter.sessionId = sessionId;
     }
     return await Measurement.find(filter);
   };
@@ -59,7 +60,7 @@ class MeasurementDAL {
                 VALUES`
     measurements.forEach((m, index) => {
       const timestamp = moment(m.timestamp).format(this.dateFormat);
-      query += `(${m.type}, '${timestamp}', ${m.x}, ${m.y}, ${m.experimentSessionId}, ${m.experimentId})`
+      query += `(${m.type}, '${timestamp}', ${m.x}, ${m.y}, ${m.sessionId}, ${m.experimentId})`
       if (index < measurements.length - 1) {
         query += ',';
       }
@@ -69,11 +70,11 @@ class MeasurementDAL {
     return insertResult.recordset;
   };
 
-  async saveMeasurementsToCassandra(measurements) {
-    let query = `INSERT INTO measurement (id, type, x, y, timestamp, "experimentSessionId")
+  async saveToCassandra(measurements, idType, table) {
+    let query = `INSERT INTO ${table} (id, type, x, y, timestamp, ${idType})
                 VALUES `
     measurements.forEach((m, index) => {
-      query += `(now(), '${m.type}', ${m.x}, ${m.y}, ${m.timestamp}, ${m.experimentSessionId})`
+      query += `(now(), '${m.type}', ${m.x}, ${m.y}, ${m.timestamp}, ${m[idType]})`
       if (index === measurements.length - 1) {
         query += ';';
       }
@@ -82,9 +83,25 @@ class MeasurementDAL {
       }
     })
     await this.cassandraDB.execute(query);
-    query = `SELECT * FROM measurement
-              WHERE "experimentSessionId"=${measurements[0].experimentSessionId};`
+    query = `SELECT * FROM ${table}
+              WHERE ${idType}=${measurements[0][idType]};`
     return await this.cassandraDB.execute(query);
+  };
+
+  async saveMeasurementsToCassandra(measurements) {
+    return await this.saveToCassandra(
+      measurements,
+      "sessionId",
+      "measurement"
+    );
+  };
+
+  async saveCalibrationToCassandra(measurements) {
+    return await this.saveToCassandra(
+      measurements,
+      "experimentId",
+      "calibration"
+    );
   };
 
   async saveMeasurementsToMongo(measurements) {
@@ -96,8 +113,8 @@ class MeasurementDAL {
 
     let i = 1;
     for (let key in fieldsToUpdate) {
-      query += `${key}=${fieldsToUpdate[key]}`
-      if (i < fieldsToUpdate.length - 1) {
+      query += ` ${key}=${fieldsToUpdate[key]}`
+      if (i < fieldsToUpdate.length) {
         query += ',';
       }
       i += 1;
@@ -117,6 +134,55 @@ class MeasurementDAL {
     query += ` SELECT * FROM Measurement ${where}`;
 
     return await this.mssqlDB.request().query(query);
+  }
+
+  async editMeasurementsInCassandra(fieldsToUpdate, filters) {
+    let query = 'SELECT * FROM measurement';
+    let where = ` WHERE `;
+
+    let i = 1;
+    for (let key in filters) {
+      const filterValue = stringFields.some(f => f === key)
+        ? `'${filters[key]}'` : filters[key];
+      where += `${key}=${filterValue}`
+      if (i < filters.length - 1) {
+        where += ' AND ';
+      }
+      i += 1;
+    }
+    query += where;
+    const result = await this.cassandraDB.execute(query);
+    const measurements = result.rows;
+
+    query = `BEGIN BATCH `
+    measurements.forEach(m => {
+      query += `UPDATE measurement SET `;
+      let i = 1;
+      for (let key in fieldsToUpdate) {
+        const updateValue = stringFields.some(f => f === key)
+          ? `'${fieldsToUpdate[key]}'` : fieldsToUpdate[key];
+        query += ` ${key}=${updateValue} `
+        if (i < fieldsToUpdate.length) {
+          query += ',';
+        }
+        i += 1;
+      }
+      where = ` WHERE experimentSessionId=${m.sessionid} AND id=${m.id};`;
+      query += where;
+    });
+    query += `APPLY BATCH;`;
+    await this.cassandraDB.execute(query);
+    query = `SELECT * FROM measurement WHERE id IN (`
+    measurements.forEach((m, index) => {
+      if (index < measurements.length - 1) {
+        query += `${m.id}, `
+      }
+      else {
+        query += `${m.id}) ALLOW FILTERING;`
+      }
+    })
+    const updated = await this.cassandraDB.execute(query);
+    return updated.rows;
   }
 
   async editMeasurementsInMongo(fieldsToUpdate, filters) {
@@ -148,20 +214,38 @@ class MeasurementDAL {
     return await Measurement.deleteMany(filters);
   }
 
-  async getMeasurements(dbType, experimentId, experimentSessionId) {
+  async getMeasurements(dbType, experimentId, sessionId) {
     switch (dbType) {
       case MSSQL_DB: {
-        return await this.getMeasurementsFromMssql(experimentId, experimentSessionId);
+        return await this.getMeasurementsFromMssql(experimentId, sessionId);
       }
       case CASSANDRA_DB: {
-        return await this.getMeasurementsFromCassandra(experimentId, experimentSessionId);
+        return await this.getMeasurementsFromCassandra(experimentId, sessionId);
       }
       case MONGO_DB: {
-        return await this.getMeasurementsFromMongo(experimentId, experimentSessionId);
+        return await this.getMeasurementsFromMongo(experimentId, sessionId);
       }
       default:
         return;
     };
+  };
+
+  async deleteMeasurementsFromCassandra(filters) {
+    let query = `DELETE FROM measurement WHERE `;
+    let i = 1;
+    for (let key in filters) {
+      const filterValue = stringFields.some(f => f === key)
+        ? `'${filters[key]}'` : filters[key];
+      query += `${key}=${filterValue}`
+      if (i < filters.length - 1) {
+        query += ' AND ';
+      }
+      else {
+        query += ';';
+      }
+      i += 1;
+    }
+    return await this.cassandraDB.execute(query);
   };
 
   async saveMeasurements(dbType, measurements) {
@@ -180,15 +264,16 @@ class MeasurementDAL {
     };
   };
 
-  async editMeasurements(dbType, fieldsToUpdate, filter) {
+  async editMeasurements(dbType, fieldsToUpdate, filters) {
     switch (dbType) {
       case MSSQL_DB: {
-        return await this.editMeasurementsInMssql(fieldsToUpdate, filter);
+        return await this.editMeasurementsInMssql(fieldsToUpdate, filters);
       }
       case CASSANDRA_DB: {
+        return await this.editMeasurementsInCassandra(fieldsToUpdate, filters);
       }
       case MONGO_DB: {
-        return await this.editMeasurementsInMongo(fieldsToUpdate, filter);
+        return await this.editMeasurementsInMongo(fieldsToUpdate, filters);
       }
       default:
         return;
@@ -201,13 +286,21 @@ class MeasurementDAL {
         return await this.deleteMeasurementsFromMssql(filters);
       }
       case CASSANDRA_DB: {
-
+        return await this.deleteMeasurementsFromCassandra(filters);
       }
       case MONGO_DB: {
         return await this.deleteMeasurementsFromMongo(filters);
       }
       default:
         return;
+    };
+  };
+
+  async saveCalibration(dbType, measurements) {
+    switch (dbType) {
+      case CASSANDRA_DB: {
+        return await this.saveCalibrationToCassandra(measurements);
+      }
     };
   };
 
