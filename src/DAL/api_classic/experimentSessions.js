@@ -1,11 +1,22 @@
+// @ts-check
 const sql = require('mssql');
-import { MSSQL_DB, CASSANDRA_DB, MONGO_DB, deviceTypes, producers } from '../../constants';
-import { Session } from '../../models/api_classic/mongo';
+import {
+  MSSQL_DB,
+  CLASSIC_CASSANDRA_DB,
+  CLASSIC_MONGO_DB,
+  deviceTypes,
+  producers
+} from '../../constants';
+import { mssql, cassandra, mongo } from '../../routes/shared';
+import { getSessionModel } from '../../models/api_classic/mongo';
+
+let Session;
 
 class SessionDAL {
   constructor(db) {
-    this.cassandraDB = db[CASSANDRA_DB];
+    this.cassandraDB = db[CLASSIC_CASSANDRA_DB];
     this.mssqlDB = db[MSSQL_DB];
+    Session = getSessionModel(db[CLASSIC_MONGO_DB]);
   }
 
   async getSessionsFromCassandra() {
@@ -69,10 +80,10 @@ class SessionDAL {
     return session;
   };
 
-  async getSessionFromCassandra(id) {
+  async getSessionFromCassandra(id, experimentId) {
     const session = await this.cassandraDB.execute(
       `SELECT * FROM experimentsession
-        WHERE id=${id}
+        WHERE experimentId=${experimentId} AND id=${id}
         ALLOW FILTERING;`
     );
     return session.rows[0];
@@ -128,6 +139,30 @@ class SessionDAL {
     return sessionResult.recordset[0];
   }
 
+  async saveSessionToMongo(session) {
+    const newSession = new Session(session)
+    await newSession.save();
+    return newSession;
+  };
+
+  async saveSessionToCassandra(session) {
+    let query = `INSERT INTO experimentSession 
+                (id, startDate, endDate, experimentId, subjectId,
+                  deviceFrequency, deviceProducer, deviceError, deviceType)
+    VALUES (now(), 
+      '${session.startDate}', 
+      '${session.endDate}', 
+      ${session.experimentId},
+      ${session.subjectId},
+      ${session.deviceFrequency},
+      '${session.deviceProducer}',
+      ${session.deviceError},
+      '${session.deviceType}'
+    );`
+    await this.cassandraDB.execute(query);
+    return;
+  }
+
   async editSessionInMssql(session) {
     const device = await this.saveDeviceIfNotSaved(session);
 
@@ -143,15 +178,64 @@ class SessionDAL {
     return result.recordset[0];
   };
 
-  async getSession(dbType, id) {
+  async editSessionInMongo(session) {
+    const updated = await Session.findByIdAndUpdate(
+      { _id: session.id },
+      session,
+      { new: true }
+    ).populate('experiment').populate('subject');
+    return updated;
+  }
+
+  async editSessionInCassandra(session) {
+    let query = `UPDATE experimentSession SET 
+                subjectId=${session.subjectId},
+                deviceType='${session.deviceType}',
+                deviceError=${session.deviceError},
+                deviceProducer='${session.deviceProducer}',
+                deviceFrequency=${session.deviceFrequency}
+                WHERE id=${session.id} 
+                AND startDate='${session.startDate}'
+                AND experimentId=${session.experimentId};`;
+    await this.cassandraDB.execute(query);
+    query = `SELECT * FROM experimentSession 
+            WHERE id=${session.id}
+            AND startDate='${session.startDate}'
+            AND experimentId=${session.experimentId};`;
+    const result = await this.cassandraDB.execute(query);
+    return result.rows[0];
+  }
+
+  async deleteSessionFromMssql(id) {
+    const query = `DELETE FROM ExperimentSession WHERE id=${id};`;
+    await this.mssqlDB.request().query(query);
+  }
+
+  async deleteSessionFromCassandra(id) {
+    let query = `SELECT * FROM experimentSession WHERE id=${id}
+                ALLOW FILTERING;`// NEEDS TO BE CHECKED WHAT HAPPENS IF WE SEND ALL THE KEY
+    const sessions = await this.cassandraDB.execute(query);
+    const session = sessions.rows[0];
+
+    query = `DELETE FROM experimentSession 
+    WHERE id=${id} AND experimentId=${session.experimentid} AND startDate='${session.startdate}';`;
+
+    return await this.cassandraDB.execute(query);
+  }
+
+  async deleteSessionFromMongo(id) {
+    return await Session.deleteOne({ _id: id });
+  }
+
+  async getSession(dbType, id, experimentId) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.getSessionFromMssql(id);
       }
-      case CASSANDRA_DB: {
-        return await this.getSessionFromCassandra(id);
+      case cassandra: {
+        return await this.getSessionFromCassandra(id, experimentId);
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.getSessionFromMongo(id);
       }
       default:
@@ -161,13 +245,13 @@ class SessionDAL {
 
   async getSessions(dbType) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.getSessionsFromMssql();
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.getSessionsFromCassandra();
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.getSessionsFromMongo();
       }
       default:
@@ -177,13 +261,13 @@ class SessionDAL {
 
   async deleteSession(dbType, id) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.deleteSessionFromMssql(id);
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.deleteSessionFromCassandra(id);
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.deleteSessionFromMongo(id);
       }
       default:
@@ -193,13 +277,13 @@ class SessionDAL {
 
   async saveSession(dbType, session) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.saveSessionToMssql(session);
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.saveSessionToCassandra(session);
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.saveSessionToMongo(session);
       }
       default:
@@ -208,15 +292,14 @@ class SessionDAL {
   };
 
   async editSession(dbType, session) {
-    console.log('edit')
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.editSessionInMssql(session);
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.editSessionInCassandra(session);
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.editSessionInMongo(session);
       }
       default:

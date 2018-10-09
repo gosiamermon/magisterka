@@ -3,10 +3,13 @@ import mongoose from 'mongoose';
 const subjectSchema = mongoose.Schema({
   age: Number,
   sex: String,
-  profession: String,
   educationLevel: String,
+  visionDefect: Boolean,
 });
 
-const Subject = mongoose.model('subjects', subjectSchema);
+function getSubjectModel(db) {
+  const Subject = db.model('subjects', subjectSchema);
+  return Subject;
+}
 
-export default Subject;
+export default getSubjectModel;

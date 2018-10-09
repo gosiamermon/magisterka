@@ -10,6 +10,9 @@ const sessionSchema = mongoose.Schema({
   deviceError: Number,
 });
 
-const Session = mongoose.model('sessions', sessionSchema);
+function getSessionModel(db) {
+  const Session = db.model('sessions', sessionSchema);
+  return Session;
+}
 
-export default Session;
+export default getSessionModel;

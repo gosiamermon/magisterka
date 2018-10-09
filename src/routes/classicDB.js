@@ -1,0 +1,1 @@
+export const url = 'classic/:dbType([A-z]+)';

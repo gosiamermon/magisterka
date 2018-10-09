@@ -3,12 +3,9 @@ import sessions from './experimentSessions';
 import subjects from './subjects';
 import measurements from './measurements';
 
-const classicUrl = 'classic/:dbType([A-z]+)';
-
 export {
-  experiments,
-  sessions,
-  subjects,
-  measurements,
-  classicUrl,
+  experiments as classic_experiments,
+  sessions as classic_sessions,
+  subjects as classic_subjects,
+  measurements as classic_measurements,
 };

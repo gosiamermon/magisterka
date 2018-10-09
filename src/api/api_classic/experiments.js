@@ -1,10 +1,10 @@
 // import mongoose from 'mongoose';
 import { status } from '../../constants';
-import { classicUrl } from './';
+import { url } from '../../routes/classicDB';
 
 export default ({ api, DAL }) => {
 
-	const baseUrl = `/${classicUrl}/experiments`;
+	const baseUrl = `/${url}/experiments`;
 
 	api.get(`${baseUrl}`, async (req, res) => {
 		const { dbType } = req.params;
@@ -14,7 +14,6 @@ export default ({ api, DAL }) => {
 		}
 
 		return res.json(experiments);
-		//pozniej mozna zrobic filtrowanie po dacie lub po typie stymulusa
 	});
 
 	api.get(`${baseUrl}/:id([A-z0-9\-]+)`, async (req, res) => {
@@ -24,7 +23,6 @@ export default ({ api, DAL }) => {
 			return res.status(status.notFound);
 		}
 		return res.json(experiment);
-		//pozniej mozna zrobic filtrowanie po dacie lub po typie stymulusa
 	});
 
 	api.post(`${baseUrl}`, async (req, res) => {

@@ -1,15 +1,14 @@
+// @ts-check
 import { status } from '../../constants';
-import { classicUrl } from './';
-import { stat } from 'fs';
+import { url } from '../../routes/classicDB';
 
 export default ({ api, DAL }) => {
 
-  const baseUrl = `/${classicUrl}/measurements`;
+  const baseUrl = `/${url}/measurements/`;
 
-  api.get(`${baseUrl}`, async (req, res) => {
-    const { dbType } = req.params;
-    const { experimentId, sessionId } = req.query;
-    const measurements = await DAL.getMeasurements(dbType, experimentId, sessionId);
+  api.get(`${baseUrl}:sessionId([A-z0-9\-]+)`, async (req, res) => {
+    const { dbType, sessionId } = req.params;
+    const measurements = await DAL.getMeasurements(dbType, sessionId);
     if (measurements === undefined) {
       return res.status(status.notFound);
     }
@@ -23,24 +22,16 @@ export default ({ api, DAL }) => {
     return res.json(result);
   });
 
-  api.post(`${baseUrl}/calibration`, async (req, res) => {
-    const { measurements } = req.body;
+  api.put(`${baseUrl}`, async (req, res) => { // tutaj zrobic update per 1 pomiar w bazie 
     const { dbType } = req.params;
-    const result = await DAL.saveCalibration(dbType, measurements);
+    const { measurement } = req.body;
+    const result = await DAL.editMeasurement(dbType, measurement);
     return res.json(result);
   });
 
-  api.put(`${baseUrl}`, async (req, res) => {
-    const { fieldsToUpdate, filters } = req.body;
-    const { dbType } = req.params;
-    const result = await DAL.editMeasurements(dbType, fieldsToUpdate, filters);
-    return res.json(result);
-  });
-
-  api.delete(`${baseUrl}`, async (req, res) => {
-    const { filters } = req.body;
-    const { dbType } = req.params;
-    await DAL.deleteMeasurements(dbType, filters);
+  api.delete(`${baseUrl}:sessionId([A-z0-9\-]+)`, async (req, res) => { // usuwanie per sesja a nie jakies filtry
+    const { dbType, sessionId } = req.params;
+    await DAL.deleteMeasurements(dbType, sessionId);
     return res.end();
   });
 

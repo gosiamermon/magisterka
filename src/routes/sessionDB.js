@@ -1,0 +1,1 @@
+export const url = 'session/:dbType([A-z]+)';

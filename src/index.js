@@ -7,10 +7,13 @@ import initializeDb from './db';
 import middleware from './middleware';
 import api from './api';
 import config from './config.json';
-import ExperimentDAL from './DAL/api_classic/experiments';
-import SessionDAL from './DAL/api_classic/experimentSessions';
-import SubjectDAL from './DAL/api_classic/subjects';
-import MeasurementDAL from './DAL/api_classic/measurements';
+import DBClassic_ExperimentDAL from './DAL/api_classic/experiments';
+import DBClassic_SessionDAL from './DAL/api_classic/experimentSessions';
+import DBClassic_ClassicSubjectDAL from './DAL/api_classic/subjects';
+import DBClassic_MeasurementDAL from './DAL/api_classic/measurements';
+import DBExperiment_ExperimentDAL from './DAL/api_experiment/experiments';
+import DBSession_ExperimentDAL from './DAL/api_session/experiments';
+import DBSession_SessionDAL from './DAL/api_session/sessions';
 
 let app = express();
 app.server = http.createServer(app);
@@ -29,16 +32,22 @@ app.use(bodyParser.json({
 
 // connect to db
 initializeDb(db => {
-
 	// internal middleware
 	app.use(middleware({ config, db }));
 
 	const DAL = {
 		classic: {
-			experiment: new ExperimentDAL(db),
-			session: new SessionDAL(db),
-			subject: new SubjectDAL(db),
-			measurement: new MeasurementDAL(db),
+			experiment: new DBClassic_ExperimentDAL(db),
+			session: new DBClassic_SessionDAL(db),
+			subject: new DBClassic_ClassicSubjectDAL(db),
+			measurement: new DBClassic_MeasurementDAL(db),
+		},
+		experiment: {
+			experiment: new DBExperiment_ExperimentDAL(db)
+		},
+		session: {
+			session: new DBSession_SessionDAL(db),
+			experiment: new DBSession_ExperimentDAL(db),
 		}
 	}
 	// api router

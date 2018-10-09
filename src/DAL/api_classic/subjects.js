@@ -1,11 +1,17 @@
+// @ts-check
 const sql = require('mssql');
-import { MSSQL_DB, CASSANDRA_DB, MONGO_DB } from '../../constants';
-import { Subject } from '../../models/api_classic/mongo';
+import { MSSQL_DB, CLASSIC_CASSANDRA_DB, CLASSIC_MONGO_DB } from '../../constants';
+import { mssql, cassandra, mongo } from '../../routes/shared';
+import { getSubjectModel } from '../../models/api_classic/mongo';
+import { sex, educationLevel } from '../../constants';
+
+let Subject;
 
 class SubjectDAL {
   constructor(db) {
-    this.cassandraDB = db[CASSANDRA_DB];
+    this.cassandraDB = db[CLASSIC_CASSANDRA_DB];
     this.mssqlDB = db[MSSQL_DB];
+    Subject = getSubjectModel(db[CLASSIC_MONGO_DB]);
   }
 
   async getSubjectsFromCassandra() {
@@ -55,15 +61,94 @@ class SubjectDAL {
     return subject.rows[0];
   };
 
+  async saveSubjectToMssql(subject) {
+    const declareInsertValues = `DECLARE @inserted table([Id] int)`;
+    let query = `${declareInsertValues}
+                INSERT INTO Subject
+                OUTPUT INSERTED.[Id] INTO @inserted
+                VALUES (${subject.age}, 
+                  ${sex[subject.sex]}, 
+                  ${educationLevel[subject.educationLevel]},
+                  ${subject.visionDefect});
+                SELECT * FROM @inserted;`
+
+    const result = await this.mssqlDB.request().query(query);
+    return result.recordset[0];
+  }
+
+  async saveSubjectToCassandra(subject) {
+    let query = `INSERT INTO subject (id, age, educationLevel, sex, visionDefect)
+    VALUES (now(), ${subject.age}, '${subject.educationLevel}', '${subject.sex}', ${!!subject.visionDefect});`
+    await this.cassandraDB.execute(query);
+    return;
+  }
+
+  async saveSubjectToMongo(subject) {
+    const newSubject = new Subject(subject);
+    await newSubject.save();
+    return newSubject;
+  }
+
+  async editSubjectInMssql(subject) {
+    let query = `UPDATE Subject SET 
+    Age=${subject.age}, 
+    SexId=${sex[subject.sex]},
+    EducationLevelId=${educationLevel[subject.educationLevel]},
+    VisionDefect=${subject.visionDefect}
+    WHERE Id=${subject.id}
+    SELECT * FROM Subject WHERE Id=${subject.id};`;
+
+    const result = await this.mssqlDB.request().query(query);
+    return result.recordset[0];
+  }
+
+  async editSubjectInCassandra(subject) {
+    let query = `UPDATE subject SET 
+                age=${subject.age},
+                sex='${subject.sex}',
+                educationLevel='${subject.educationLevel}',
+                visionDefect=${!!subject.visionDefect}
+                WHERE id=${subject.id};`;
+
+    await this.cassandraDB.execute(query);
+    query = `SELECT * FROM subject WHERE id=${subject.id};`;
+
+    const result = await this.cassandraDB.execute(query);
+    return result.rows[0];
+  }
+
+  async editSubjectInMongo(subject) {
+    const updated = await Subject.findByIdAndUpdate(
+      { _id: subject.id },
+      subject,
+      { new: true }
+    );
+    return updated;
+  }
+
+  async deleteSubjectFromMssql(id) {
+    const query = `DELETE FROM Subject WHERE Id=${id};`;
+    await this.mssqlDB.request().query(query);
+  }
+
+  async deleteSubjectFromCassandra(id) {
+    const query = `DELETE FROM subject WHERE id=${id};`;
+    return await this.cassandraDB.execute(query);
+  }
+
+  async deleteSubjectFromMongo(id) {
+    return await Subject.deleteOne({ _id: id });
+  }
+
   async getSubject(dbType, id) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.getSubjectFromMssql(id);
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.getSubjectFromCassandra(id);
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.getSubjectFromMongo(id);
       }
       default:
@@ -73,19 +158,68 @@ class SubjectDAL {
 
   async getSubjects(dbType) {
     switch (dbType) {
-      case MSSQL_DB: {
+      case mssql: {
         return await this.getSubjectsFromMssql();
       }
-      case CASSANDRA_DB: {
+      case cassandra: {
         return await this.getSubjectsFromCassandra();
       }
-      case MONGO_DB: {
+      case mongo: {
         return await this.getSubjectsFromMongo();
       }
       default:
         return;
     };
   };
+
+  async saveSubject(dbType, subject) {
+    switch (dbType) {
+      case mssql: {
+        return await this.saveSubjectToMssql(subject);
+      }
+      case cassandra: {
+        return await this.saveSubjectToCassandra(subject);
+      }
+      case mongo: {
+        return await this.saveSubjectToMongo(subject);
+      }
+      default:
+        return;
+    };
+  };
+
+  async editSubject(dbType, subject) {
+    switch (dbType) {
+      case mssql: {
+        return await this.editSubjectInMssql(subject);
+      }
+      case cassandra: {
+        return await this.editSubjectInCassandra(subject);
+      }
+      case mongo: {
+        return await this.editSubjectInMongo(subject);
+      }
+      default:
+        return;
+    };
+  };
+
+  async deleteSubject(dbType, id) {
+    switch (dbType) {
+      case mssql: {
+        return await this.deleteSubjectFromMssql(id);
+      }
+      case cassandra: {
+        return await this.deleteSubjectFromCassandra(id);
+      }
+      case mongo: {
+        return await this.deleteSubjectFromMongo(id);
+      }
+      default:
+        return;
+    };
+  }
+
 };
 
 export default SubjectDAL;

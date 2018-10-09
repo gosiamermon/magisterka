@@ -1,5 +1,5 @@
 import { status } from '../../constants';
-import { url } from '../../routes/classicDB';
+import { url } from '../../routes/sessionDB';
 
 export default ({ api, DAL }) => {
 
@@ -8,18 +8,12 @@ export default ({ api, DAL }) => {
   api.get(`${baseUrl}`, async (req, res) => {
     const { dbType } = req.params;
     const sessions = await DAL.getSessions(dbType);
-    if (sessions === undefined) {
-      return res.status(status.notFound);
-    }
     return res.json(sessions);
   });
 
   api.get(`${baseUrl}/:id([A-z0-9\-]+)`, async (req, res) => {
     const { dbType, id } = req.params;
     const session = await DAL.getSession(dbType, id);
-    if (session === undefined) {
-      return res.status(status.notFound);
-    }
     return res.json(session);
   });
 
@@ -37,10 +31,10 @@ export default ({ api, DAL }) => {
     return res.json(result);
   });
 
-  api.delete(`${baseUrl}/:id([A-z0-9\-]+)`, async (req, res) => {
-    const { dbType, id } = req.params;
-    await DAL.deleteSession(dbType, id);
+  api.delete(`${baseUrl}`, async (req, res) => {
+    const { dbType } = req.params;
+    const { id, experimentId } = req.body;
+    await DAL.deleteSession(dbType, id, experimentId);
     return res.end();
   });
-
-}
+};

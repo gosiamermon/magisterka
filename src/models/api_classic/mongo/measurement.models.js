@@ -4,11 +4,14 @@ const measurementSchema = mongoose.Schema({
   timestamp: Date,
   x: Number,
   y: Number,
-  type: String,
-  experiment: { type: mongoose.Schema.Types.ObjectId, ref: 'experiments' },
+  stymulusId: Number,
   session: { type: mongoose.Schema.Types.ObjectId, ref: 'experimentSessions' },
+  isCalibration: Boolean,
 });
 
-const Measurement = mongoose.model('measurements', measurementSchema);
+function getMeasurementModel(db) {
+  const Measurement = db.model('measurements', measurementSchema);
+  return Measurement;
+}
 
-export default Measurement;
+export default getMeasurementModel;
