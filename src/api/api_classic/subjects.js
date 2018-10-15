@@ -25,14 +25,14 @@ export default ({ api, DAL }) => {
   });
 
   api.post(`${baseUrl}`, async (req, res) => {
-    const { subject } = req.body;
+    const subject = req.body;
     const { dbType } = req.params;
     const result = await DAL.saveSubject(dbType, subject);
     return res.json(result);
   });
 
   api.put(`${baseUrl}`, async (req, res) => {
-    const { subject } = req.body;
+    const subject = req.body;
     const { dbType } = req.params;
     const result = await DAL.editSubject(dbType, subject);
     return res.json(result);

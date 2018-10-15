@@ -13,20 +13,35 @@ class ExperimentDAL {
   }
 
   async getExperimentsFromCassandra() {
-    const experiments = await this.cassandraDB.execute('SELECT * FROM experiment');
+    const experiments = await this.cassandraDB
+      .execute('SELECT id, name, startDate, endDate FROM experiment');
     return experiments.rows;
   }
 
   async getExperimentsFromMongo() {
-    const experiments = await Experiment.find();
+    const experiments = await Experiment.find({}, ["_id", "name", "startDate", "endDate"]);
     return experiments;
   }
 
   async getExperimentFromCassandra(id) {
-    const experiment = await this.cassandraDB.execute(
+    const experimentResult = await this.cassandraDB.execute(
       `SELECT * FROM experiment
       WHERE id=${id}`);
-    return experiment.rows[0];
+    const experiment = experimentResult.rows[0];
+    experiment.sessions.map(session => {
+      session.measurements = session.measurements.map(m => {
+        m.x = Number(m.x);
+        m.y = Number(m.y);
+        return m;
+      });
+      session.calibration = session.calibration.map(m => {
+        m.x = Number(m.x);
+        m.y = Number(m.y);
+        return m;
+      });
+      return session;
+    });
+    return experimentResult.rows[0];
   }
 
   async getExperimentFromMongo(id) {
@@ -40,7 +55,7 @@ class ExperimentDAL {
       educationLevel: '${subject.educationLevel}',
       profession: '${subject.profession}',
       sex: '${subject.sex}',
-      visionDefect: ${subject.visionDefect}
+      visionDefect: ${!!subject.visionDefect}
     }`
     return subjectString;
   }
@@ -53,12 +68,7 @@ class ExperimentDAL {
         timestamp: ${measurement.timestamp},
         x: ${measurement.x},
         y: ${measurement.y},
-        stymulusLink: '${measurement.stymulusLink}',
-        stymulusStartTime: ${measurement.stymulusStartTime},
-        stymulusEndTime: ${measurement.stymulusEndTime},
-        stymulusType: '${measurement.stymulusType}',
-        stymulusX: ${measurement.stymulusX},
-        stymulusY: ${measurement.stymulusY}
+        stymulusId: ${measurement.stymulusId}
       }`
 
       if (index < measurements.length - 1) {
@@ -95,11 +105,37 @@ class ExperimentDAL {
     return sessions;
   }
 
+  createStymulusToSaveInCassandra(experiment) {
+    let stymulus = ``
+    experiment.stymulus.forEach((s, index) => {
+      stymulus += `{
+        startTime:${s.startTime},
+        endTime:${s.endTime},
+        stymulusType:'${s.stymulusType}',
+        link:'${s.link}',
+        x: ${s.x ? s.x : null},
+        y: ${s.y ? s.y : null},
+        id: ${s.id}
+      }`
+      if (index < experiment.stymulus.length - 1) {
+        stymulus += ',';
+      }
+    });
+    return stymulus;
+  }
+
   async saveExperimentToCassandra(experiment) {
-    let query = 'INSERT INTO experiment (id, startDate, endDate, sessions)';
+    const stymulus = this.createStymulusToSaveInCassandra(experiment);
+    let query = 'INSERT INTO experiment (id, startDate, endDate, sessions, name, stymulus)';
     const sessions = this.prepareSessions(experiment);
 
-    query += `VALUES (now(), '${experiment.startDate}', '${experiment.endDate}', {${sessions}});`
+    query += `VALUES (
+      now(), 
+      '${experiment.startDate}', 
+      '${experiment.endDate}', 
+      {${sessions}}, 
+      '${experiment.name}', 
+      {${stymulus}});`
     await this.cassandraDB.execute(query);
     return;
   }
@@ -111,11 +147,14 @@ class ExperimentDAL {
   }
 
   async editExperimentInCassandra(experiment) {
+    const stymulus = this.createStymulusToSaveInCassandra(experiment);
     const sessions = this.prepareSessions(experiment);
     let query = `UPDATE experiment SET 
                 startDate='${experiment.startDate}',
                 endDate='${experiment.endDate}' ,
-                sessions={${sessions}}
+                name='${experiment.name}',
+                sessions={${sessions}},
+                stymulus={${stymulus}}
                 WHERE id=${experiment.id};`;
 
     await this.cassandraDB.execute(query);

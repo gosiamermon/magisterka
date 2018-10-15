@@ -1,5 +1,5 @@
 // @ts-check
-const sql = require('mssql');
+import _ from 'lodash-uuid';
 import { MSSQL_DB, CLASSIC_CASSANDRA_DB, CLASSIC_MONGO_DB } from '../../constants';
 import { mssql, cassandra, mongo } from '../../routes/shared';
 import { getSubjectModel } from '../../models/api_classic/mongo';
@@ -37,14 +37,13 @@ class SubjectDAL {
 
   async getSubjectFromMssql(id) {
     const subjectResult = await this.mssqlDB.request()
-      .input('id', sql.Int, id)
       .query(`SELECT Subject.*, 
            Sex.Value AS Sex, 
            EducationLevel.Value AS EducationLevel 
            FROM Subject
            LEFT JOIN Sex ON Subject.SexId = Sex.Id
            LEFT JOIN EducationLevel ON Subject.EducationLevelId = EducationLevel.Id
-           WHERE Subject.id=@id`);
+           WHERE Subject.id=${id}`);
     const subject = subjectResult.recordset[0];
     return subject;
   };
@@ -77,10 +76,11 @@ class SubjectDAL {
   }
 
   async saveSubjectToCassandra(subject) {
+    const id = _.uuid();
     let query = `INSERT INTO subject (id, age, educationLevel, sex, visionDefect)
-    VALUES (now(), ${subject.age}, '${subject.educationLevel}', '${subject.sex}', ${!!subject.visionDefect});`
+    VALUES (${id}, ${subject.age}, '${subject.educationLevel}', '${subject.sex}', ${!!subject.visionDefect});`
     await this.cassandraDB.execute(query);
-    return;
+    return { id };
   }
 
   async saveSubjectToMongo(subject) {

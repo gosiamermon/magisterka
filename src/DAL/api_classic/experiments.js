@@ -1,5 +1,5 @@
 // @ts-check
-const sql = require('mssql');
+import _ from 'lodash-uuid';
 import { MSSQL_DB, CLASSIC_CASSANDRA_DB, CLASSIC_MONGO_DB, stymulusTypes } from '../../constants';
 import { cassandra, mssql, mongo } from '../../routes/shared';
 import { getExperimentModel } from '../../models/api_classic/mongo';
@@ -14,29 +14,22 @@ class ExperimentDAL {
   }
 
   async getExperimentsFromCassandra() {
-    const experiments = await this.cassandraDB.execute('SELECT * FROM experiment');
+    const experiments = await this.cassandraDB
+      .execute('SELECT id, name, startDate, endDate FROM experiment');
     return experiments.rows;
   };
 
   async getExperimentsFromMssql() {
-    const experimentsResult = await this.mssqlDB.request()
-      .query(`SELECT * FROM Experiment`);
-    const stymulusResult = await this.mssqlDB.request()
-      .query(`SELECT Stymulus.*, StymulusType.Value AS Type FROM Stymulus
-        LEFT JOIN StymulusType ON Stymulus.StymulusTypeId = StymulusType.Id`);
-
-    const experiments = experimentsResult.recordset;
-    const stymulus = stymulusResult.recordset;
-
-    experiments.forEach(e => {
-      const relatedStymulus = stymulus.filter(s => s.ExperimentId === e.Id);
-      e.stymulus = relatedStymulus;
-    });
-    return experiments;
+    const experiments = await this.mssqlDB.request()
+      .query(`SELECT Id, Name, StartDate, EndDate FROM Experiment`);
+    return experiments.recordset;
   };
 
   async getExperimentsFromMongo() {
-    const experiments = await Experiment.find();
+    let experiments = await Experiment.find({}, ["_id", "name", "startDate", "endDate"]);
+    experiments = experiments.map(experiment => {
+      return experiment;
+    })
     return experiments;
   };
 
@@ -44,11 +37,14 @@ class ExperimentDAL {
     const experimentResult = await this.mssqlDB.request()
       .query(`SELECT * FROM Experiment WHERE id=${id}`);
     const stymulusResult = await this.mssqlDB.request()
-      .query(`SELECT Stymulus.*, StymulusType.Value AS Type FROM Stymulus
-      LEFT JOIN StymulusType ON Stymulus.StymulusTypeId = StymulusType.Id`);
+      .query(`SELECT Stymulus.*,
+      StymulusType.Value AS StymulusType
+      FROM Stymulus 
+      LEFT JOIN StymulusType ON Stymulus.StymulusTypeId = StymulusType.Id
+      WHERE experimentId=${id};`);
+
     const experiment = experimentResult.recordset[0];
-    const stymulus = stymulusResult.recordset;
-    experiment.stymulus = stymulus;
+    experiment.stymulus = stymulusResult.recordset;
 
     return experiment;
   };
@@ -70,24 +66,19 @@ class ExperimentDAL {
     let query = `${declareInsertValues}
                 INSERT INTO Experiment
                 OUTPUT INSERTED.[Id] INTO @inserted
-                VALUES ('${experiment.startDate}', '${experiment.endDate}');
+                VALUES ('${experiment.startDate}', '${experiment.endDate}', '${experiment.name}');
                 SELECT * FROM @inserted;`
     const experimentResult = await this.mssqlDB.request().query(query);
-    const savedExperiment = experimentResult.recordset[0];
-
-    experiment.id = savedExperiment.Id;
-    const stymulus = await this.saveStymulusInMssql(experiment);
-
-    savedExperiment.stymulus = stymulus;
-    return savedExperiment;
+    return experimentResult.recordset[0];
   };
 
   async saveExperimentToCassandra(experiment) {
     const stymulus = this.createStymulusToSaveInCassandra(experiment);
-    let query = `INSERT INTO experiment (id, startDate, endDate, stymulus)
-    VALUES (now(), '${experiment.startDate}', '${experiment.endDate}', {${stymulus}});`
+    const id = _.uuid();
+    let query = `INSERT INTO experiment (id, startDate, endDate, stymulus, name)
+    VALUES (${id}, '${experiment.startDate}', '${experiment.endDate}', {${stymulus}}, '${experiment.name}');`
     await this.cassandraDB.execute(query);
-    return;
+    return { id };
   };
 
   async saveExperimentToMongo(experiment) {
@@ -99,17 +90,13 @@ class ExperimentDAL {
   async editExperimentInMssql(experiment) {
     let query = `UPDATE Experiment SET 
                 StartDate='${experiment.startDate}', 
-                EndDate='${experiment.endDate}' 
+                EndDate='${experiment.endDate}',
+                Name='${experiment.name}'
                 WHERE id=${experiment.id}
                 SELECT * FROM Experiment WHERE id=${experiment.id};`;
     const result = await this.mssqlDB.request().query(query);
     const savedExperiment = result.recordset[0];
-
-    await this.deleteStymulusFromMssql(experiment);
-    const stymulus = await this.saveStymulusInMssql(experiment);
-
-    savedExperiment.stymulus = stymulus;
-    return savedExperiment;
+    return savedExperiment.Id;
   };
 
   async editExperimentInCassandra(experiment) {
@@ -117,6 +104,7 @@ class ExperimentDAL {
     let query = `UPDATE experiment SET 
                 startDate='${experiment.startDate}',
                 endDate='${experiment.endDate}' ,
+                name='${experiment.name}',
                 stymulus={${stymulus}}
                 WHERE id=${experiment.id};`;
     await this.cassandraDB.execute(query);
@@ -149,41 +137,6 @@ class ExperimentDAL {
     return await Experiment.deleteOne({ _id: id });
   };
 
-  async getStymulusFromMssql(id) {
-    const stymulusResult = await this.mssqlDB.request()
-      .query(`SELECT Stymulus.*, StymulusType.Value AS Type FROM Stymulus
-        LEFT JOIN StymulusType ON Stymulus.StymulusTypeId = StymulusType.Id
-        WHERE Stymulus.ExperimentId=${id}`);
-    return stymulusResult.recordset;
-  };
-
-  async deleteStymulusFromMssql(experiment) {
-    let query = `DELETE FROM Stymulus WHERE experimentId=${experiment.id}`;
-    await this.mssqlDB.request().query(query);
-    return;
-  };
-
-  async saveStymulusInMssql(experiment) {
-    let query = `INSERT INTO Stymulus VALUES `;
-    experiment.stymulus.forEach((s, index) => {
-      query += `(
-         ${s.id}
-        '${s.link}',
-         ${s.startTime},
-         ${s.endTime},
-         ${experiment.id},
-         ${stymulusTypes[s.stymulusType]},
-         ${s.x},
-         ${s.y}
-      )`
-      if (index < experiment.stymulus.length - 1) {
-        query += ',';
-      }
-    })
-    await this.mssqlDB.request().query(query);
-    return await this.getStymulusFromMssql(experiment.id);
-  };
-
   createStymulusToSaveInCassandra(experiment) {
     let stymulus = ``
     experiment.stymulus.forEach((s, index) => {
@@ -192,8 +145,8 @@ class ExperimentDAL {
         endTime:${s.endTime},
         stymulusType:'${s.stymulusType}',
         link:'${s.link}',
-        x: ${s.x},
-        y: ${s.y},
+        x: ${s.x ? s.x : null},
+        y: ${s.y ? s.y : null},
         id: ${s.id}
       }`
       if (index < experiment.stymulus.length - 1) {

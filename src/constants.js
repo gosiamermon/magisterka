@@ -13,7 +13,7 @@ export const status = {
 export const stymulusTypes = {
   "image": 1,
   "video": 2,
-  "point2D": 3,
+  "Point2D": 3,
 }
 
 export const deviceTypes = {

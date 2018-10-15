@@ -11,24 +11,28 @@ const measurementSchema = mongoose.Schema({
   timestamp: Date,
   x: Number,
   y: Number,
-  stymulusLink: String,
-  stymulusStartTime: Date,
-  stymulusEndTime: Date,
-  stymulusType: String,
-  stymulusX: Number,
-  stymulusY: Number,
+  stymulusId: Number,
 });
 
 const sessionSchema = mongoose.Schema({
-  experimentId: mongoose.Schema.Types.ObjectId,
+  experiment: mongoose.Schema.Types.ObjectId,
   deviceError: Number,
   deviceFrequency: Number,
   deviceProducer: String,
+  deviceType: String,
   startDate: Date,
   endDate: Date,
   subject: subjectSchema,
   measurements: Array(measurementSchema),
   calibration: Array(measurementSchema)
+});
+
+sessionSchema.virtual('id').get(function () {
+  return this._id.toHexString();
+});
+
+sessionSchema.set('toJSON', {
+  virtuals: true
 });
 
 function getSessionModel(db) {

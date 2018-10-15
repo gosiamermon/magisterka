@@ -18,14 +18,14 @@ export default ({ api, DAL }) => {
   });
 
   api.post(`${baseUrl}`, async (req, res) => {
-    const { experiment } = req.body;
+    const experiment = req.body;
     const { dbType } = req.params;
     const result = await DAL.saveExperiment(dbType, experiment);
     return res.json(result);
   });
 
   api.put(`${baseUrl}`, async (req, res) => {
-    const { experiment } = req.body;
+    const experiment = req.body;
     const { dbType } = req.params;
     const result = await DAL.editExperiment(dbType, experiment);
     return res.json(result);

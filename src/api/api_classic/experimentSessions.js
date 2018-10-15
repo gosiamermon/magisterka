@@ -5,9 +5,9 @@ export default ({ api, DAL }) => {
 
   const baseUrl = `/${url}/sessions`;
 
-  api.get(`${baseUrl}`, async (req, res) => {
-    const { dbType } = req.params;
-    const sessions = await DAL.getSessions(dbType);
+  api.get(`${baseUrl}/byExperiment/:experimentId([A-z0-9\-]+)`, async (req, res) => {
+    const { dbType, experimentId } = req.params;
+    const sessions = await DAL.getSessions(dbType, experimentId);
     if (sessions === undefined) {
       return res.status(status.notFound);
     }
@@ -24,14 +24,14 @@ export default ({ api, DAL }) => {
   });
 
   api.post(`${baseUrl}`, async (req, res) => {
-    const { session } = req.body;
+    const session = req.body;
     const { dbType } = req.params;
     const result = await DAL.saveSession(dbType, session);
     return res.json(result);
   });
 
   api.put(`${baseUrl}`, async (req, res) => {
-    const { session } = req.body;
+    const session = req.body;
     const { dbType } = req.params;
     const result = await DAL.editSession(dbType, session);
     return res.json(result);

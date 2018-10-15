@@ -1,5 +1,6 @@
 // @ts-check
-const sql = require('mssql');
+import mongoose from 'mongoose';
+import _ from 'lodash-uuid';
 import {
   MSSQL_DB,
   CLASSIC_CASSANDRA_DB,
@@ -19,8 +20,8 @@ class SessionDAL {
     Session = getSessionModel(db[CLASSIC_MONGO_DB]);
   }
 
-  async getSessionsFromCassandra() {
-    let sessions = await this.cassandraDB.execute('SELECT * FROM experimentsession');
+  async getSessionsFromCassandra(experimentId) {
+    let sessions = await this.cassandraDB.execute(`SELECT * FROM experimentSession WHERE experimentId=${experimentId}`);
     let subjects = await this.cassandraDB.execute(`SELECT * FROM subject`);
     sessions = sessions.rows;
     subjects = subjects.rows;
@@ -33,11 +34,13 @@ class SessionDAL {
     return sessions;
   };
 
-  async getSessionsFromMssql() {
+  async getSessionsFromMssql(experimentId) {
     const sessionsResult = await this.mssqlDB.request()
       .query(`SELECT ExperimentSession.*, 
            Sex.Value AS SubjectSex, 
            EducationLevel.Value AS SubjectEducationLevel,
+           Subject.VisionDefect AS SubjectVisionDefect,
+           Subject.Age AS SubjectAge,
            DeviceType.Value AS DeviceType,
            Device.Error AS DeviceError,
            Producer.Value AS DeviceProducer,
@@ -48,13 +51,13 @@ class SessionDAL {
            LEFT JOIN DeviceType ON Device.TypeId = DeviceType.Id
            LEFT JOIN Producer ON Device.ProducerId = Producer.Id
            LEFT JOIN Sex ON Subject.SexId = Sex.Id
-           LEFT JOIN EducationLevel ON Subject.EducationLevelId = EducationLevel.Id`);
+           LEFT JOIN EducationLevel ON Subject.EducationLevelId = EducationLevel.Id
+           WHERE ExperimentId=${experimentId}`);
     return sessionsResult.recordset;
   };
 
-  async getSessionsFromMongo() {
-    const sessions = await Session.find()
-      .populate('experiment')
+  async getSessionsFromMongo(experimentId) {
+    const sessions = await Session.find({ experiment: experimentId })
       .populate('subject');
     return sessions;
   };
@@ -83,8 +86,7 @@ class SessionDAL {
   async getSessionFromCassandra(id, experimentId) {
     const session = await this.cassandraDB.execute(
       `SELECT * FROM experimentsession
-        WHERE experimentId=${experimentId} AND id=${id}
-        ALLOW FILTERING;`
+        WHERE experimentId=${experimentId} AND id=${id};`
     );
     return session.rows[0];
   };
@@ -135,21 +137,28 @@ class SessionDAL {
                   ${device.Id}
                 );
                 SELECT * FROM @inserted;`
+
     const sessionResult = await this.mssqlDB.request().query(query);
     return sessionResult.recordset[0];
   }
 
   async saveSessionToMongo(session) {
+    session.experiment = session.experimentId;
+    delete session.experimentId;
+    session.subject = session.subjectId;
+    delete session.subjectId;
+
     const newSession = new Session(session)
     await newSession.save();
     return newSession;
   };
 
   async saveSessionToCassandra(session) {
+    const id = _.uuid();
     let query = `INSERT INTO experimentSession 
                 (id, startDate, endDate, experimentId, subjectId,
                   deviceFrequency, deviceProducer, deviceError, deviceType)
-    VALUES (now(), 
+    VALUES (${id}, 
       '${session.startDate}', 
       '${session.endDate}', 
       ${session.experimentId},
@@ -160,7 +169,7 @@ class SessionDAL {
       '${session.deviceType}'
     );`
     await this.cassandraDB.execute(query);
-    return;
+    return { id };
   }
 
   async editSessionInMssql(session) {
@@ -243,16 +252,16 @@ class SessionDAL {
     };
   };
 
-  async getSessions(dbType) {
+  async getSessions(dbType, experimentId) {
     switch (dbType) {
       case mssql: {
-        return await this.getSessionsFromMssql();
+        return await this.getSessionsFromMssql(experimentId);
       }
       case cassandra: {
-        return await this.getSessionsFromCassandra();
+        return await this.getSessionsFromCassandra(experimentId);
       }
       case mongo: {
-        return await this.getSessionsFromMongo();
+        return await this.getSessionsFromMongo(experimentId);
       }
       default:
         return;

@@ -1,5 +1,5 @@
 // @ts-check
-const sql = require('mssql');
+import _ from 'lodash-uuid';
 import { SESSION_CASSANDRA_DB, SESSION_MONGO_DB } from '../../constants';
 import { getExperimentModel } from '../../models/api_session/mongo';
 import { cassandra, mongo } from '../../routes/shared';
@@ -13,12 +13,13 @@ class ExperimentDAL {
   }
 
   async getExperimentsFromCassandra() {
-    const experiments = await this.cassandraDB.execute('SELECT * FROM experiment');
+    const experiments = await this.cassandraDB
+      .execute('SELECT id, name, startDate, endDate FROM experiment');
     return experiments.rows;
   }
 
   async getExperimentsFromMongo() {
-    const experiments = await Experiment.find();
+    const experiments = await Experiment.find({}, ["_id", "name", "startDate", "endDate"]);
     return experiments;
   }
 
@@ -35,10 +36,18 @@ class ExperimentDAL {
   }
 
   async saveExperimentToCassandra(experiment) {
-    const query = `INSERT INTO experiment (id, startDate, endDate)
-      VALUES (now(), '${experiment.startDate}', '${experiment.endDate}');`
+    const id = _.uuid();
+    const stymulus = this.createStymulusToSaveInCassandra(experiment);
+    const query = `INSERT INTO experiment (id, startDate, endDate, name, stymulus)
+      VALUES (
+        ${id}, 
+        '${experiment.startDate}', 
+        '${experiment.endDate}', 
+        '${experiment.name}', 
+        {${stymulus}}
+      );`
     await this.cassandraDB.execute(query);
-    return;
+    return { id };
   }
 
   async saveExperimentToMongo(experiment) {
@@ -47,10 +56,32 @@ class ExperimentDAL {
     return newExperiment;
   }
 
+  createStymulusToSaveInCassandra(experiment) {
+    let stymulus = ``
+    experiment.stymulus.forEach((s, index) => {
+      stymulus += `{
+        startTime:${s.startTime},
+        endTime:${s.endTime},
+        stymulusType:'${s.stymulusType}',
+        link:'${s.link}',
+        x: ${s.x ? s.x : null},
+        y: ${s.y ? s.y : null},
+        id: ${s.id}
+      }`
+      if (index < experiment.stymulus.length - 1) {
+        stymulus += ',';
+      }
+    });
+    return stymulus;
+  }
+
   async editExperimentInCassandra(experiment) {
+    const stymulus = this.createStymulusToSaveInCassandra(experiment);
     let query = `UPDATE experiment SET 
                 startDate='${experiment.startDate}',
-                endDate='${experiment.endDate}' 
+                endDate='${experiment.endDate}',
+                name='${experiment.name}',
+                stymulus={${stymulus}}
                 WHERE id=${experiment.id};`;
 
     await this.cassandraDB.execute(query);

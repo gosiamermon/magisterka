@@ -5,8 +5,16 @@ const measurementSchema = mongoose.Schema({
   x: Number,
   y: Number,
   stymulusId: Number,
-  session: { type: mongoose.Schema.Types.ObjectId, ref: 'experimentSessions' },
+  session: { type: mongoose.Schema.Types.ObjectId, ref: 'sessions' },
   isCalibration: Boolean,
+});
+
+measurementSchema.virtual('id').get(function () {
+  return this._id.toHexString();
+});
+
+measurementSchema.set('toJSON', {
+  virtuals: true
 });
 
 function getMeasurementModel(db) {

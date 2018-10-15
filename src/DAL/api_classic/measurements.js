@@ -1,11 +1,10 @@
 // @ts-check
-const sql = require('mssql');
+import mongoose from 'mongoose';
+import chunk from 'lodash.chunk';
 import moment from 'moment';
-const mongoose = require('mongoose');
 import { MSSQL_DB, CLASSIC_CASSANDRA_DB, CLASSIC_MONGO_DB } from '../../constants';
 import { mssql, cassandra, mongo } from '../../routes/shared';
 import { getMeasurementModel } from '../../models/api_classic/mongo';
-import { stringFields } from '../../constants';
 
 let Measurement;
 
@@ -20,37 +19,51 @@ class MeasurementDAL {
 
   async getMeasurementsFromCassandra(sessionId) {
     let query = `SELECT * FROM measurement WHERE sessionId=${sessionId};`;
-    let measurements = await this.cassandraDB.execute(query);
-    return measurements.rows;
+    let measurementsResult = await this.cassandraDB.execute(query);
+    const measurements = measurementsResult.rows.map(m => {
+      m.x = Number(m.x);
+      m.y = Number(m.y);
+      m.timestamp = moment(m.timestamp).valueOf();
+      return m;
+    });
+    return measurements;
   };
 
   async getMeasurementsFromMssql(sessionId) {
     let query = `SELECT * FROM Measurement WHERE SessionId=${sessionId};`
 
-    const measurements = await this.mssqlDB.request().query(query);
-    return measurements.recordset;
+    const measurementsResult = await this.mssqlDB.request().query(query);
+    const measurements = measurementsResult.recordset.map(m => {
+      m.Timestamp = moment(m.Timestamp).valueOf();
+      return m;
+    });
+    return measurements;
   };
 
   async getMeasurementsFromMongo(sessionId) {
-    return await Measurement.find({ sessionId });
+    return await Measurement.find({ session: sessionId });
   };
 
   async saveMeasurementsToMssql(measurements) {
-    const declareInsertValues = `DECLARE @inserted table([Id] int)`
-    let query = `${declareInsertValues}
-                INSERT INTO Measurement
-                OUTPUT INSERTED.[Id] INTO @inserted
-                VALUES`
-    measurements.forEach((m, index) => {
-      const timestamp = moment(m.timestamp).format(this.dateFormat);
-      query += `('${timestamp}', ${m.x}, ${m.y}, ${m.sessionId}, ${m.stymulusId}, ${m.isCalibration})`
-      if (index < measurements.length - 1) {
-        query += ',';
-      }
-    })
-    query += ' SELECT * FROM @inserted;';
-    const insertResult = await this.mssqlDB.request().query(query);
-    return insertResult.recordset;
+    const measurementsDivided = chunk(measurements, 1000)
+    let query = `BEGIN TRAN T1;`;
+
+    for (let i = 0; i < measurementsDivided.length; i++) {
+      query += `INSERT INTO Measurement VALUES`
+      const measurementsChunk = measurementsDivided[i];
+      measurementsChunk.forEach((m, index) => {
+        const timestamp = moment(m.timestamp).format(this.dateFormat);
+        query += `('${timestamp}', ${m.x}, ${m.y}, ${m.sessionId}, ${m.stymulusId}, ${m.isCalibration})`
+        if (index < measurementsChunk.length - 1) {
+          query += ',';
+        } else {
+          query += ';';
+        }
+      });
+    }
+    query += 'COMMIT TRAN T1;'
+    await this.mssqlDB.request().query(query);
+    return;
   };
 
   async saveMeasurementsToCassandra(measurements) {
@@ -70,6 +83,11 @@ class MeasurementDAL {
   };
 
   async saveMeasurementsToMongo(measurements) {
+    measurements = measurements.map(m => {
+      m.session = mongoose.Types.ObjectId(m.sessionId);
+      delete m.sessionId;
+      return m;
+    });
     return await Measurement.collection.insertMany(measurements);
   };
 
@@ -148,6 +166,7 @@ class MeasurementDAL {
   };
 
   async saveMeasurements(dbType, measurements) {
+    console.log(dbType)
     switch (dbType) {
       case mssql: {
         return await this.saveMeasurementsToMssql(measurements);

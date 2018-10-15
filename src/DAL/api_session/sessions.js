@@ -13,13 +13,13 @@ class SessionDAL {
     Session = getSessionModel(db[SESSION_MONGO_DB]);
   }
 
-  async getSessionsFromCassandra() {
-    const sessions = await this.cassandraDB.execute('SELECT * FROM session');
+  async getSessionsFromCassandra(experimentId) {
+    const sessions = await this.cassandraDB.execute(`SELECT * FROM session WHERE experimentId=${experimentId}`);
     return sessions.rows;
   }
 
-  async getSessionsFromMongo() {
-    const sessions = await Session.find();
+  async getSessionsFromMongo(experimentId) {
+    const sessions = await Session.find({ experiment: experimentId });
     return sessions;
   }
 
@@ -40,7 +40,7 @@ class SessionDAL {
       age: ${subject.age},
       educationLevel: '${subject.educationLevel}',
       sex: '${subject.sex}',
-      visionDefect: ${subject.visionDefect}
+      visionDefect: ${!!subject.visionDefect}
     }`
     return subjectString;
   }
@@ -53,12 +53,7 @@ class SessionDAL {
         timestamp: ${measurement.timestamp},
         x: ${measurement.x},
         y: ${measurement.y},
-        stymulusLink: '${measurement.stymulusLink}',
-        stymulusStartTime: ${measurement.stymulusStartTime},
-        stymulusEndTime: ${measurement.stymulusEndTime},
-        stymulusType: '${measurement.stymulusType}',
-        stymulusX: ${measurement.stymulusX},
-        stymulusY: ${measurement.stymulusY}
+        stymulusId: ${measurement.stymulusId}
       }`
 
       if (index < measurements.length - 1) {
@@ -105,6 +100,8 @@ class SessionDAL {
   }
 
   async saveSessionToMongo(session) {
+    session.experiment = session.experimentId;
+    delete session.experimentId;
     const newSession = new Session(session);
     await newSession.save();
     return newSession;
@@ -150,7 +147,6 @@ class SessionDAL {
   }
 
   async deleteSessionFromMongo(id) {
-    console.log(id);
     return await Session.deleteOne({ _id: id });
   }
 
@@ -167,13 +163,13 @@ class SessionDAL {
     };
   };
 
-  async getSessions(dbType) {
+  async getSessions(dbType, experimentId) {
     switch (dbType) {
       case cassandra: {
-        return await this.getSessionsFromCassandra();
+        return await this.getSessionsFromCassandra(experimentId);
       }
       case mongo: {
-        return await this.getSessionsFromMongo();
+        return await this.getSessionsFromMongo(experimentId);
       }
       default:
         return;
@@ -181,7 +177,6 @@ class SessionDAL {
   };
 
   async deleteSession(dbType, id, experimentId) {
-    console.log(dbType, id)
     switch (dbType) {
       case cassandra: {
         return await this.deleteSessionFromCassandra(id, experimentId);
