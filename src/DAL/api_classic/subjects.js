@@ -68,7 +68,8 @@ class SubjectDAL {
                 VALUES (${subject.age}, 
                   ${sex[subject.sex]}, 
                   ${educationLevel[subject.educationLevel]},
-                  ${subject.visionDefect});
+                  ${subject.visionDefect},
+                  '${subject.name}');
                 SELECT * FROM @inserted;`
 
     const result = await this.mssqlDB.request().query(query);
@@ -77,8 +78,8 @@ class SubjectDAL {
 
   async saveSubjectToCassandra(subject) {
     const id = _.uuid();
-    let query = `INSERT INTO subject (id, age, educationLevel, sex, visionDefect)
-    VALUES (${id}, ${subject.age}, '${subject.educationLevel}', '${subject.sex}', ${!!subject.visionDefect});`
+    let query = `INSERT INTO subject (id, age, educationLevel, sex, visionDefect, name)
+    VALUES (${id}, ${subject.age}, '${subject.educationLevel}', '${subject.sex}', ${!!subject.visionDefect}, '${subject.name}');`
     await this.cassandraDB.execute(query);
     return { id };
   }

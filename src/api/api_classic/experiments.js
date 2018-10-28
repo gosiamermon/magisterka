@@ -16,6 +16,18 @@ export default ({ api, DAL }) => {
 		return res.json(experiments);
 	});
 
+	api.get(`${baseUrl}/OneQuery/ByExperiment/:id([A-z0-9\-]+)`, async (req, res) => {
+		const { dbType, id } = req.params;
+		const experiment = await DAL.getExperimentInOneQuery(dbType, id);
+		return res.json(experiment);
+	});
+
+	api.get(`${baseUrl}/OneQuery/BySubject/:subjectName([A-z0-9\-]+)`, async (req, res) => {
+		const { dbType, subjectName } = req.params;
+		const subjectExperiments = await DAL.getSubjectExperimentsInOneQuery(dbType, subjectName);
+		return res.json(subjectExperiments);
+	});
+
 	api.get(`${baseUrl}/:id([A-z0-9\-]+)`, async (req, res) => {
 		const { dbType, id } = req.params;
 		const experiment = await DAL.getExperiment(dbType, id);
@@ -24,6 +36,7 @@ export default ({ api, DAL }) => {
 		}
 		return res.json(experiment);
 	});
+
 
 	api.post(`${baseUrl}`, async (req, res) => {
 		const experiment = req.body;

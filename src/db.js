@@ -6,9 +6,11 @@ import {
 	CLASSIC_CASSANDRA_DB,
 	EXPERIMENT_CASSANDRA_DB,
 	SESSION_CASSANDRA_DB,
+	SUBJECT_CASSANDRA_DB,
 	CLASSIC_MONGO_DB,
 	EXPERIMENT_MONGO_DB,
 	SESSION_MONGO_DB,
+	SUBJECT_MONGO_DB,
 } from './constants'
 
 export default async callback => {
@@ -30,8 +32,9 @@ export default async callback => {
 	const classic_mongo = mongoose.createConnection('mongodb://localhost/eyetracking_classic');
 	const experiment_mongo = mongoose.createConnection('mongodb://localhost/eyetracking_experiment');
 	const session_mongo = mongoose.createConnection('mongodb://localhost/eyetracking_session');
+	const subject_mongo = mongoose.createConnection('mongodb://localhost/eyetracking_subject');
 	// Cassandra
-	const classic_cassandraDB = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'eyetracking_classic' });
+	const classic_cassandraDB = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'eyetracking_classic', socketOptions: { coalescingThreshold: 16000 } });
 	classic_cassandraDB.connect(function (err) {
 		if (err) return console.error(err);
 		console.log('Connected to cluster with %d host(s): %j', classic_cassandraDB.hosts.length, classic_cassandraDB.hosts.keys());
@@ -49,13 +52,21 @@ export default async callback => {
 		console.log('Connected to cluster with %d host(s): %j', session_cassandraDB.hosts.length, session_cassandraDB.hosts.keys());
 	});
 
+	const subject_cassandraDB = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'eyetracking_subject' });
+	subject_cassandraDB.connect(function (err) {
+		if (err) return console.error(err);
+		console.log('Connected to cluster with %d host(s): %j', subject_cassandraDB.hosts.length, subject_cassandraDB.hosts.keys());
+	});
+
 	callback({
 		[MSSQL_DB]: sqlDB,
 		[CLASSIC_CASSANDRA_DB]: classic_cassandraDB,
 		[EXPERIMENT_CASSANDRA_DB]: experiment_cassandraDB,
 		[SESSION_CASSANDRA_DB]: session_cassandraDB,
+		[SUBJECT_CASSANDRA_DB]: subject_cassandraDB,
 		[CLASSIC_MONGO_DB]: classic_mongo,
 		[EXPERIMENT_MONGO_DB]: experiment_mongo,
 		[SESSION_MONGO_DB]: session_mongo,
+		[SUBJECT_MONGO_DB]: subject_mongo,
 	});
 }

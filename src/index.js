@@ -15,11 +15,16 @@ import DBClassic_ClassicSubjectDAL from './DAL/api_classic/subjects';
 import DBClassic_MeasurementDAL from './DAL/api_classic/measurements';
 import DBClassic_StymulusDAL from './DAL/api_classic/stymulus';
 import DBClassic_QueriesTranslatorDAL from './DAL/api_classic/queriesTranslator';
+
 import DBExperiment_ExperimentDAL from './DAL/api_experiment/experiments';
 import DBExperiment_StymulusDAL from './DAL/api_experiment/stymulus';
+
 import DBSession_ExperimentDAL from './DAL/api_session/experiments';
 import DBSession_SessionDAL from './DAL/api_session/sessions';
 import DBSession_StymulusDAL from './DAL/api_session/stymulus';
+
+import DBSubject_SubjectDAL from './DAL/api_subject/subjects';
+import DBSubject_StymulusDAL from './DAL/api_subject/stymulus';
 
 let app = express();
 app.server = http.createServer(app);
@@ -55,12 +60,16 @@ initializeDb(db => {
 		},
 		experiment: {
 			experiment: new DBExperiment_ExperimentDAL(db),
-			stymulus: new DBExperiment_StymulusDAL(db),
+			stymulus: new DBExperiment_StymulusDAL(),
 		},
 		session: {
 			session: new DBSession_SessionDAL(db),
 			experiment: new DBSession_ExperimentDAL(db),
-			stymulus: new DBSession_StymulusDAL(db),
+			stymulus: new DBSession_StymulusDAL(),
+		},
+		subject: {
+			subject: new DBSubject_SubjectDAL(db),
+			stymulus: new DBSubject_StymulusDAL(),
 		}
 	}
 	// api router

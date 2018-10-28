@@ -17,6 +17,12 @@ export default ({ api, DAL }) => {
     return res.json(experiment);
   });
 
+  api.get(`${baseUrl}/bySubject/:subjectName([A-z0-9\-]+)`, async (req, res) => {
+    const { dbType, subjectName } = req.params;
+    const experiment = await DAL.getSubjectExperiments(dbType, subjectName);
+    return res.json(experiment);
+  });
+
   api.post(`${baseUrl}`, async (req, res) => {
     const experiment = req.body;
     const { dbType } = req.params;

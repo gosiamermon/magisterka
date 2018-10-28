@@ -1,8 +1,10 @@
 // @ts-check
 const sql = require('mssql');
+import moment from 'moment';
 import { EXPERIMENT_CASSANDRA_DB, EXPERIMENT_MONGO_DB } from '../../constants';
 import { getExperimentModel } from '../../models/api_experiment/mongo/';
 import { cassandra, mongo } from '../../routes/shared';
+import timeLogger from '../../helpers/timeLogger';
 
 let Experiment;
 
@@ -23,10 +25,32 @@ class ExperimentDAL {
     return experiments;
   }
 
+  async getSubjectExperimentsFromCassandra(subjectName) {
+    const query = `SELECT * FROM experiment WHERE subjectsNames CONTAINS '${subjectName}'
+      ALLOW FILTERING;`
+
+    const start = moment().valueOf();
+    const experiments = await this.cassandraDB.execute(query);
+    const filteredExperimentsData = experiments.rows.map(experiment => {
+      experiment.sessions = experiment.sessions.filter(s => s.subject.name === subjectName);
+      return experiment;
+    });
+    const end = moment().valueOf();
+    timeLogger(start, end, 'cassandra_experiment', 'read_by_subject');
+    return filteredExperimentsData;
+  }
+
   async getExperimentFromCassandra(id) {
+
+    const start = moment().valueOf();
+
     const experimentResult = await this.cassandraDB.execute(
       `SELECT * FROM experiment
       WHERE id=${id}`);
+
+    const end = moment().valueOf();
+    timeLogger(start, end, 'cassandra_experiment', 'read_by_experiment');
+
     const experiment = experimentResult.rows[0];
     experiment.sessions.map(session => {
       session.measurements = session.measurements.map(m => {
@@ -45,8 +69,29 @@ class ExperimentDAL {
   }
 
   async getExperimentFromMongo(id) {
+    const start = moment().valueOf();
+
     const experiment = await Experiment.findOne({ _id: id });
+
+    const end = moment().valueOf();
+    timeLogger(start, end, 'mongo_experiment', 'read_by_experiment');
+
     return experiment;
+  }
+
+  async getSubjectExperimentsFromMongo(subjectName) {
+    const start = moment().valueOf();
+    const experiments = await Experiment.find(
+      { subjects: { $elemMatch: { "name": subjectName } } },
+      {
+        startDate: 1,
+        endDate: 1, name: 1,
+        stymulus: 1,
+        subjects: { $elemMatch: { "name": subjectName } }
+      });
+    const end = moment().valueOf();
+    timeLogger(start, end, 'mongo_experiment', 'read_by_subject');
+    return experiments;
   }
 
   prepareSubject(subject) {
@@ -55,7 +100,8 @@ class ExperimentDAL {
       educationLevel: '${subject.educationLevel}',
       profession: '${subject.profession}',
       sex: '${subject.sex}',
-      visionDefect: ${!!subject.visionDefect}
+      visionDefect: ${!!subject.visionDefect},
+      name: '${subject.name}'
     }`
     return subjectString;
   }
@@ -96,7 +142,8 @@ class ExperimentDAL {
         endDate: '${session.endDate}',
         subject: ${subject},
         measurements: ${measurements},
-        calibration: ${calibration}
+        calibration: ${calibration},
+        deviceType: '${session.deviceType}'
       }`
       if (index < experiment.sessions.length - 1) {
         sessions += ',';
@@ -124,25 +171,53 @@ class ExperimentDAL {
     return stymulus;
   }
 
+  prepareSubjectsNames(subjectsNames) {
+    let query = '{';
+    for (let i = 0; i < subjectsNames.length; i++) {
+      const name = subjectsNames[i];
+      query += `'${name}'`;
+      if (i < subjectsNames.length - 1) {
+        query += ', ';
+      }
+    }
+    query += '}';
+    return query;
+  }
+
   async saveExperimentToCassandra(experiment) {
     const stymulus = this.createStymulusToSaveInCassandra(experiment);
-    let query = 'INSERT INTO experiment (id, startDate, endDate, sessions, name, stymulus)';
+    let query = 'INSERT INTO experiment (id, startDate, endDate, sessions, name, stymulus, subjectsNames)';
     const sessions = this.prepareSessions(experiment);
-
+    const subjectsNames = this.prepareSubjectsNames(experiment.subjectsNames);
     query += `VALUES (
       now(), 
       '${experiment.startDate}', 
       '${experiment.endDate}', 
       {${sessions}}, 
       '${experiment.name}', 
-      {${stymulus}});`
+      {${stymulus}},
+      ${subjectsNames});`;
+
+    const start = moment().valueOf();
+
     await this.cassandraDB.execute(query);
+
+    const end = moment().valueOf();
+    timeLogger(start, end, 'cassandra_experiment', 'write');
+
     return;
   }
 
   async saveExperimentToMongo(experiment) {
     const newExperiment = new Experiment(experiment);
+
+    const start = moment().valueOf();
+
     await newExperiment.save();
+
+    const end = moment().valueOf();
+    timeLogger(start, end, 'mongo_experiment', 'write');
+
     return newExperiment;
   }
 
@@ -201,6 +276,19 @@ class ExperimentDAL {
       }
       case mongo: {
         return await this.getExperimentsFromMongo();
+      }
+      default:
+        return;
+    };
+  };
+
+  async getSubjectExperiments(dbType, subjectName) {
+    switch (dbType) {
+      case cassandra: {
+        return await this.getSubjectExperimentsFromCassandra(subjectName);
+      }
+      case mongo: {
+        return await this.getSubjectExperimentsFromMongo(subjectName);
       }
       default:
         return;

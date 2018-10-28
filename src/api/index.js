@@ -10,6 +10,7 @@ import {
 } from './api_classic';
 import { experiment_experiments, experiment_stymulus } from './api_experiment';
 import { session_experiments, session_sessions, session_stymulus } from './api_session'
+import { subject_stymulus, subject_subjects } from './api_subject';
 
 export default ({ DAL }) => {
 	let api = Router();
@@ -24,5 +25,7 @@ export default ({ DAL }) => {
 	session_experiments({ api, DAL: DAL.session.experiment });
 	session_sessions({ api, DAL: DAL.session.session });
 	session_stymulus({ api, DAL: DAL.session.stymulus });
+	subject_stymulus({ api, DAL: DAL.subject.stymulus });
+	subject_subjects({ api, DAL: DAL.subject.subject });
 	return api;
 }

@@ -166,7 +166,6 @@ class MeasurementDAL {
   };
 
   async saveMeasurements(dbType, measurements) {
-    console.log(dbType)
     switch (dbType) {
       case mssql: {
         return await this.saveMeasurementsToMssql(measurements);

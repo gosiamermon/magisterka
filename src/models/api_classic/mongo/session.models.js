@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
+import { measurementSchema } from './measurement.models'
 
-const sessionSchema = mongoose.Schema({
+export const sessionSchema = mongoose.Schema({
   startDate: Date,
   endDate: Date,
   experiment: { type: mongoose.Schema.Types.ObjectId, ref: 'experiments' },
@@ -9,6 +10,7 @@ const sessionSchema = mongoose.Schema({
   deviceProducer: String,
   deviceError: Number,
   deviceType: String,
+  measurements: Array(measurementSchema),
 });
 
 sessionSchema.virtual('id').get(function () {

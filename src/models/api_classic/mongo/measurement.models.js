@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const measurementSchema = mongoose.Schema({
+export const measurementSchema = mongoose.Schema({
   timestamp: Date,
   x: Number,
   y: Number,

@@ -1,12 +1,5 @@
 import mongoose from 'mongoose';
 
-const subjectSchema = mongoose.Schema({
-  age: Number,
-  educationLevel: String,
-  sex: String,
-  visionDefect: Boolean,
-});
-
 const stymulusSchema = mongoose.Schema({
   startTime: Number,
   endTime: Number,
@@ -31,16 +24,24 @@ const sessionSchema = mongoose.Schema({
   deviceType: String,
   startDate: Date,
   endDate: Date,
-  subject: subjectSchema,
   measurements: Array(measurementSchema),
   calibration: Array(measurementSchema)
+});
+
+const subjectSchema = mongoose.Schema({
+  age: Number,
+  educationLevel: String,
+  sex: String,
+  visionDefect: Boolean,
+  name: String,
+  sessions: Array(sessionSchema)
 });
 
 const experimentSchema = mongoose.Schema({
   name: String,
   startDate: Date,
   endDate: Date,
-  sessions: Array(sessionSchema),
+  subjects: Array(subjectSchema),
   stymulus: Array(stymulusSchema),
 });
 

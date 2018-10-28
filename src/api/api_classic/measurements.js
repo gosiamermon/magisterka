@@ -7,7 +7,6 @@ export default ({ api, DAL }) => {
   const baseUrl = `/${url}/measurements/`;
 
   api.get(`${baseUrl}:sessionId([A-z0-9\-]+)`, async (req, res) => {
-    console.log('get')
     const { dbType, sessionId } = req.params;
     const measurements = await DAL.getMeasurements(dbType, sessionId);
     if (measurements === undefined) {
@@ -17,7 +16,6 @@ export default ({ api, DAL }) => {
   });
 
   api.post(`${baseUrl}`, async (req, res) => {
-    console.log('post')
     const measurements = req.body;
     const { dbType } = req.params;
     const result = await DAL.saveMeasurements(dbType, measurements);

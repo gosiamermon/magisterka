@@ -1,10 +1,13 @@
 import mongoose from 'mongoose';
+import { sessionSchema } from './session.models';
 
 const subjectSchema = mongoose.Schema({
   age: Number,
   sex: String,
   educationLevel: String,
   visionDefect: Boolean,
+  name: String,
+  sessions: Array(sessionSchema),
 });
 
 subjectSchema.virtual('id').get(function () {

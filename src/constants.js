@@ -1,10 +1,12 @@
 export const CLASSIC_CASSANDRA_DB = 'Cassandra_classic';
 export const EXPERIMENT_CASSANDRA_DB = 'Cassandra_experiment';
 export const SESSION_CASSANDRA_DB = 'Cassandra_session';
+export const SUBJECT_CASSANDRA_DB = 'Cassandra_subject';
 export const MSSQL_DB = 'Mssql';
 export const CLASSIC_MONGO_DB = 'Mongo_classic';
 export const EXPERIMENT_MONGO_DB = 'Mongo_experiment';
 export const SESSION_MONGO_DB = 'Mongo_session';
+export const SUBJECT_MONGO_DB = 'Mongo_subject';
 
 export const status = {
   notFound: '404',

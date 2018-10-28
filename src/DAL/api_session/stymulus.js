@@ -1,14 +1,9 @@
 // @ts-check
-import { MSSQL_DB } from '../../constants';
 import fs from 'fs';
 import mkdirp from 'mkdirp';
 import _ from 'lodash-uuid';
 
 class StymulusDAL {
-  constructor(db) {
-    this.mssqlDB = db[MSSQL_DB];
-  }
-
   saveImagesToDisk(dbType, images) {
     const savedImages = [];
     const folderId = _.uuid();

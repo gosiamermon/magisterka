@@ -1,0 +1,1 @@
+export const url = 'subject/:dbType([A-z]+)';

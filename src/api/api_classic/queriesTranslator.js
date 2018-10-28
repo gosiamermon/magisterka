@@ -10,7 +10,6 @@ export default ({ api, DAL }) => {
     const { query } = req.body;
     const { dbType } = req.params;
     const result = await DAL.executeQuery(dbType, query);
-    console.log(result)
     return res.json(result);
   });
 }
